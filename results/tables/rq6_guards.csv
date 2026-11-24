@@ -1,0 +1,2 @@
+n_trials,pinning_fire_rate,gating_fire_rate,pinning_false_alarm_rate,gating_threshold
+1000,0.489,0.352,0.0,0.3

@@ -1,0 +1,2 @@
+n_rows,click_rate,conversion_rate,timestamp_span_days,delay_median_days,delay_mean_days,delay_frac_gt_14d,n_train,n_valid,n_test
+16468027,0.3612,0.049,30.92,3.745,7.138,0.2074,11405791,2033632,3028604

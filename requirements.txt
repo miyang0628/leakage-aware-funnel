@@ -1,0 +1,9 @@
+# Install torch separately for your CUDA (see README). These cover everything else.
+numpy>=1.24.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+jupyter>=1.0.0
+# torch>=2.1.0   # install via the platform-specific index URL in the README

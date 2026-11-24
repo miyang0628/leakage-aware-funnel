@@ -1,0 +1,7 @@
+feature,family,leak_strength,standalone_auroc,oracle_flags_leak
+row_feat_asof15,row,0.6,0.9308,True
+campaign_feat_asof15,campaign,0.6,0.541,False
+row_feat_asof20,row,0.6,0.9316,True
+campaign_feat_asof20,campaign,0.6,0.5425,False
+row_feat_asof25,row,0.6,0.932,True
+campaign_feat_asof25,campaign,0.6,0.544,False
