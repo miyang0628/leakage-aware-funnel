@@ -22,7 +22,8 @@ leakage-aware-funnel/
 │   ├── 01_detection.ipynb      # RQ1 (detection) and RQ2 (oracle blind spot)
 │   ├── 02_robustness.ipynb     # RQ3 (robustness under leakage) and RQ4 (no-leak parity)
 │   ├── 03_ablation.ipynb       # RQ5 (component ablation)
-│   └── 04_guards.ipynb         # RQ6 (deployment guards)
+│   ├── 04_guards.ipynb         # RQ6 (deployment guards)
+│   └── 05_lambda_sweep.ipynb   # leak-regularizer strength sweep (diagnostic)
 └── results/
     ├── figures/          # figures written here (grayscale, dpi 600, .png and .pdf)
     └── tables/           # result tables written here (.csv)
@@ -39,6 +40,12 @@ leakage-aware-funnel/
 | `02_robustness` | RQ4 | Without leakage, does the proposed model match baselines (no accuracy cost)? |
 | `03_ablation` | RQ5 | Contribution of the monotonicity penalty, leakage regularizer, cross-stage attention |
 | `04_guards` | RQ6 | Firing / false-alarm rates of feature pinning and degradation gating |
+| `05_lambda_sweep` | — | How the leak regularizer's strength (λ) affects the leaky-feature gate and live AUROC |
+
+Note on RQ5: the leak regularizer's standalone benefit is **data-regime dependent** — clearly
+positive on a ~1M-row sample (λ=0→1 closes the leaky gate ~0.78→0.02 and raises live AUROC
+~0.67→0.72), but it shrinks toward zero on the full 11.4M-row training set, where the model learns
+enough clean signal without the leaky feature. Report this honestly; `05_lambda_sweep` quantifies it.
 
 ## Data
 
@@ -109,8 +116,59 @@ Two things dominate wall-clock time:
    `FAST = False` (default) is the full, paper-grade run. Leave it `False` for the numbers you report.
 
 The feature tokenizer is vectorized (a single embedding gather for all categorical fields and one
-broadcast for dense features), batches are large, and host→device transfers are non-blocking with
-`cudnn.benchmark` enabled, so most of the remaining cost on a GPU is the Transformer encoder itself.
+broadcast for dense features), batches are large, and `cudnn.benchmark` is enabled, so most of the
+remaining cost on a GPU is the Transformer encoder itself.
+
+**Windows note (important).** Training does **not** use PyTorch `DataLoader` worker processes. On
+Windows, `num_workers > 0` inside a single-cell notebook deadlocks — spawned workers cannot re-import
+classes defined in the notebook, so the run hangs on the first batch with no error (you see only the
+`device:` line, then nothing). To avoid this entirely, each data split is moved to the GPU once as
+tensors and batched by index; `num_workers` is 0 and unused for training. If a split does not fit in
+GPU memory, the code automatically falls back to keeping it in CPU memory (slower but correct). If you
+ever reintroduce a `DataLoader` here, keep `num_workers=0` on Windows.
+
+**Numerical stability.** Mixed precision (`CFG["train"]["amp"]`) is **off by default**. On a GPU,
+float16 AMP can produce non-finite predictions on the Transformer and ESMM paths (ESMM inverts a
+probability product back to a logit), which previously surfaced downstream as
+`ValueError: Input contains NaN` during metric computation. The models are small enough to run in
+float32 at full speed on a consumer GPU, so AMP is disabled by default; training additionally skips
+any batch whose loss is non-finite, and evaluation replaces any non-finite prediction with the neutral
+0.5 (and prints a warning) rather than crashing. Enable AMP only if you need the extra speed and have
+confirmed the metrics stay finite.
+
+## Feature selection and the input-leakage audit (important)
+
+Only features available **at bidding time** are used as model inputs: the contextual categoricals
+`cat1`–`cat9`, the `campaign` id, and `time_since_last_click`. The Criteo Attribution dataset's
+`click_pos`, `click_nb`, `cost`, `cpo`, and `attribution` are computed along the conversion path or
+per order (e.g. `click_pos` is "the position of the click *before a conversion*"; `cpo` is cost per
+order), so they are **post-outcome features that leak the conversion label** — each has a standalone
+AUROC of ~1.0 against `conversion`. The stage-1 label `click` is likewise never used as an input.
+
+Notebooks `02` and `03` call `audit_input_leakage(CFG)` before training: it measures each input
+feature's standalone AUROC against the label and prints a warning for any feature at/above 0.99
+(i.e. one that effectively encodes the label). A clean run prints
+`input leakage audit: OK`. If you add features, watch this line — a near-1.0 test AUROC for every
+model is a symptom of label leakage, not of a strong model.
+
+## The leak regularizer (how robustness is achieved) and FAST mode
+
+`LeakFunnel` gives each input feature a learnable gate `g_j = sigmoid(gate_logit_j)` applied before
+the Transformer encoder. The leak regularizer `lambda_leak * sum_j z_j * g_j` (with `z_j` the
+per-feature leak score) pushes the gates of leaky features toward 0, so a leaky feature is removed
+from the representation rather than merely down-weighted in attention. For the gate to actually
+close, three settings matter and are the defaults: `gate_logit` initializes at 0 (gate 0.5, maximal
+sigmoid slope); the gates get their own optimizer group with a higher learning rate
+(`gate_lr_mult`, default 50) and **no weight decay**; and `lambda_leak` defaults to 1.0.
+
+Observed on a 1M-row sample: a leaky feature's gate goes from ~0.99 at `lambda_leak=0` to ~0.02 at
+`lambda_leak=1`, and the live-period conversion AUROC of `leakfunnel` rises from ~0.66 (gate off)
+to ~0.76 (gate on), versus ~0.61 for the baselines — i.e. the regularizer is what buys the
+robustness.
+
+**Report RQ3/RQ5 with `FAST = False`.** FAST subsamples rows, which destabilizes gate training and
+blurs the `full` vs `no_leakreg` gap (it can even invert variant ranks on a small sample). Use FAST
+only to confirm the pipeline runs; produce the numbers you report on the full data, ≥3 epochs, GPU.
 
 ## Reproducibility notes
 
