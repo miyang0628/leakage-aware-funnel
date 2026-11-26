@@ -1,16 +1,11 @@
 # leakage-aware-funnel
 
 Reproducibility code for the paper **"Leakage-Aware Representation Learning for Multi-Stage
-Conversion Prediction"** (under review, anonymous submission).
+Conversion Prediction"** by Yunhee Yang, Hyunjeong Kang, and Munil Yang.
 
 This repository contains the experiment notebooks, the controlled temporal-leakage injection
 harness, the detection oracle, the proposed leakage-regularized Transformer funnel model, and the
-baseline models used to produce all reported results. It is released to support anonymous peer review
-and reproducibility.
-
-> **Anonymity.** This repository is anonymized for double-blind review. It intentionally contains no
-> author names, affiliations, acknowledgements, or absolute file paths. Please keep it anonymous when
-> referencing it during review.
+baseline models used to produce all reported results, together with the result tables and figures.
 
 ## Repository structure
 
@@ -42,11 +37,23 @@ leakage-aware-funnel/
 | `04_guards` | RQ6 | Firing / false-alarm rates of feature pinning and degradation gating |
 | `05_lambda_sweep` | — | How live robustness and the leaky-feature gate respond to the regularizer strength lambda |
 
+A small synthetic mechanism check for the data-scale effect (reported in the paper's appendix) is
+included as a standalone script; see "Supplementary experiment" below.
+
 ## Data
 
-The experiments use a public multi-stage conversion dataset with real impression and conversion
-timestamps (click → conversion funnel). The dataset is **not redistributed** here. Obtain it from its
-original public source and place a preprocessed Parquet file at:
+The experiments use two public datasets.
+
+**Criteo Attribution Modeling for Bidding** (primary benchmark): real impression and conversion
+timestamps forming a click → conversion funnel. Available from Criteo AI Lab:
+https://ailab.criteo.com/criteo-attribution-modeling-bidding-dataset/
+
+**Online Shoppers Purchasing Intention** (secondary dataset): 12,330 e-commerce sessions, adapted to
+a two-stage pseudo-funnel. Available from the UCI Machine Learning Repository:
+https://archive.ics.uci.edu/dataset/468/online+shoppers+purchasing+intention+dataset
+
+Neither dataset is redistributed here. Obtain each from its original public source. For the primary
+benchmark, place a preprocessed Parquet file at:
 
 ```
 data/criteo_clean.parquet
@@ -91,6 +98,22 @@ To control dataset size, epochs, and the number of seeds, edit the `CFG` diction
 notebook's cell (`CFG["train"]["max_rows"]`, `CFG["train"]["epochs"]`, `CFG["eval"]["n_seeds"]`). The
 defaults use the full dataset, 3 epochs, and 5 seeds.
 
+## Supplementary experiment (synthetic data-scale check)
+
+The paper reports the data-scale effect with two measured Criteo training sizes (1M and 11.4M) and
+corroborates the mechanism behind the trend with a small, fully synthetic reproduction. That synthetic
+harness and its output are included under `supplementary/`:
+
+```
+supplementary/datascale_synth.py    # self-contained synthetic data-scale experiment
+supplementary/datascale_synth.csv   # its output (gain and leaky-feature gate vs. training size)
+```
+
+It re-implements the input-gated Transformer with a row-level leak injected in training and neutralized
+at serving, then sweeps the training size. It is a mechanism illustration, not a quantitative claim
+about Criteo: absolute AUROC values are not comparable to the real-data tables, only the direction of
+the trend is informative.
+
 ## Speed
 
 Notebooks `00`, `01`, and `04` are vectorized NumPy/pandas and finish in seconds. Notebooks `02`,
@@ -123,6 +146,20 @@ broadcast for dense features), batches are large, and host→device transfers ar
 - Two leakage families are provided: a *row-level* leak that the detection oracle catches, and an
   *aggregation-diluted* leak that evades it — the latter is a deliberate hard negative examined in RQ2.
 
+## Citation
+
+If you use this code or the harness, please cite:
+
+```bibtex
+@article{yang2026leakage,
+  title   = {Leakage-Aware Representation Learning for Multi-Stage Conversion Prediction},
+  author  = {Yang, Yunhee and Kang, Hyunjeong and Yang, Munil},
+  journal = {Journal of Data, Information and Management},
+  year    = {2026},
+  note    = {Under review}
+}
+```
+
 ## License
 
-Released for anonymous review. A license will be specified upon de-anonymization.
+Released under the MIT License. See `LICENSE`.
